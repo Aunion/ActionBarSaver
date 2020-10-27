@@ -1,15 +1,14 @@
 if( GetLocale() ~= "esMX" ) then return end
 local L = {}
-L["/abs count - Toggles checking if you have the item in your inventory before restoring it, use if you have disconnect issues when restoring."] = "/abs count - Comprobar de que tiene el objeto en su inventario antes de restaurarlo. Activa esta opción si se desconecta al restaurar."
 L["/abs delete <profile> - Deletes the saved profile."] = "/abs delete <perfil> - Eliminar el perfil guardado."
 L["/abs errors - Lists the errors that happened on the last restore (if any)."] = "/abs errors - Listar los errores (si los hay) que ocurrieron en la previa restauración."
 L["/abs link \"<spell 1>\" \"<spell 2>\" - Links a spell with another, INCLUDE QUOTES for example you can use \"Shadowmeld\" \"War Stomp\" so if War Stomp can't be found, it'll use Shadowmeld and vica versa."] = "/abs link \"<hechizo 1>\" \"<hechizo 2>\" - Enlazar un hechizo con otro. INCLUYA LAS COMILLAS. Por ejemplo, si se introduce \"Fusión de las sombras\" \"Pisotón de guerra\", se utilizará \"Pisotón de guerra\" cuando no se encuentra \"Fusión de las sombras\", y viceversa."
 L["/abs list - Lists all saved profiles."] = "/abs list - Listar los perfiles guardados."
-L["/abs logout - Toggles auto saving of the current profile whenever you leave the world."] = "/abs logout - Guardar automáticamente la perfil acutal al desconectar."
 L["/abs macro - Attempts to restore macros that have been deleted for a profile."] = "/abs macro - Tratar a restaurar los macros que se han eliminado para el perfil."
 L["/abs rename <oldProfile> <newProfile> - Renames a saved profile from oldProfile to newProfile."] = "/abs rename <perfilAntiguo> <perfilNuevo> - Cambiar el nombre de un perfil guardado de perfilAntiguo a perfilNuevo."
 L["/abs restore <profile> - Changes your action bars to the passed profile."] = "/abs restore <perfil> - Cambiar las barras de acción al perfil especificado."
 L["/abs save <profile> - Saves your current action bar setup under the given profile."] = "/abs save <perfil> - Guardar la configuración actual de las barras de acción al perfil especificado."
+L["/abs softrestore <profile> - Changes your action bars to the passed profile. Soft restore will only add saved buttons, not empty buttons that have no value saved to them."] = "/abs softrestore <profile> - Changes your action bars to the passed profile. Soft restore will only add saved buttons, not empty buttons that have no value saved to them."
 L["/abs test <profile> - Tests restoring a profile, results will be outputted to chat."] = "/abs test <perfil> - Ensayar a restaurar un perfil, y informar los resultados a chat."
 L["Also moved from the unknown category to %s."] = "También movió desde la categoría desconocida a %s."
 L["Auto macro restoration is now disabled!"] = "Restauración automática está ahora desactivado!"

@@ -1,15 +1,14 @@
 local ABS = select(2, ...)
 local L = {}
-L["/abs count - Toggles checking if you have the item in your inventory before restoring it, use if you have disconnect issues when restoring."] = "/abs count - Toggles checking if you have the item in your inventory before restoring it, use if you have disconnect issues when restoring."
 L["/abs delete <profile> - Deletes the saved profile."] = "/abs delete <profile> - Deletes the saved profile."
 L["/abs errors - Lists the errors that happened on the last restore (if any)."] = "/abs errors - Lists the errors that happened on the last restore (if any)."
 L["/abs link \"<spell 1>\" \"<spell 2>\" - Links a spell with another, INCLUDE QUOTES for example you can use \"Shadowmeld\" \"War Stomp\" so if War Stomp can't be found, it'll use Shadowmeld and vica versa."] = "/abs link \"<spell 1>\" \"<spell 2>\" - Links a spell with another, INCLUDE QUOTES for example you can use \"Shadowmeld\" \"War Stomp\" so if War Stomp can't be found, it'll use Shadowmeld and vica versa."
 L["/abs list - Lists all saved profiles."] = "/abs list - Lists all saved profiles."
-L["/abs logout - Toggles auto saving of the current profile whenever you leave the world."] = "/abs logout - Toggles auto saving of the current profile whenever you leave the world."
 L["/abs macro - Attempts to restore macros that have been deleted for a profile."] = "/abs macro - Attempts to restore macros that have been deleted for a profile."
 L["/abs rename <oldProfile> <newProfile> - Renames a saved profile from oldProfile to newProfile."] = "/abs rename <oldProfile> <newProfile> - Renames a saved profile from oldProfile to newProfile."
 L["/abs restore <profile> - Changes your action bars to the passed profile."] = "/abs restore <profile> - Changes your action bars to the passed profile."
 L["/abs save <profile> - Saves your current action bar setup under the given profile."] = "/abs save <profile> - Saves your current action bar setup under the given profile."
+L["/abs softrestore <profile> - Changes your action bars to the passed profile. Soft restore will only add saved buttons, not empty buttons that have no value saved to them."] = "/abs softrestore <profile> - Changes your action bars to the passed profile. Soft restore will only add saved buttons, not empty buttons that have no value saved to them."
 L["/abs test <profile> - Tests restoring a profile, results will be outputted to chat."] = "/abs test <profile> - Tests restoring a profile, results will be outputted to chat."
 L["Also moved from the unknown category to %s."] = "Also moved from the unknown category to %s."
 L["Auto macro restoration is now disabled!"] = "Auto macro restoration is now disabled!"

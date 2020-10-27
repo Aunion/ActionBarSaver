@@ -23,7 +23,7 @@ local MAX_MACROS = MAX_CHAR_MACROS + MAX_GLOBAL_MACROS
 function ABS:OnInitialize()
 	local defaults = {
 		macro = false,
-		checkCount = false,
+		softRestore = false,
 		spellSubs = {},
 		sets = {}
 	}
@@ -234,7 +234,7 @@ function ABS:RestoreProfile(name, overrideClass)
 			local type, id = GetActionInfo(i)
 		
 			-- Clear the current spot
-			if( id or type ) then
+			if( (id or type) and not self.db.softRestore ) then
 				PickupAction(i)
 				ClearCursor()
 			end
@@ -388,7 +388,18 @@ SlashCmdList["ABS"] = function(msg)
 			self:Print(string.format(L["Cannot restore profile \"%s\", you can only restore profiles saved to your class."], arg))
 			return
 		end
+		self.db.softRestore = false
+		self:RestoreProfile(arg, playerClass)
 		
+	-- Profile restoring
+	elseif( cmd == "softrestore" and arg ~= "" ) then
+		for i=#(restoreErrors), 1, -1 do table.remove(restoreErrors, i) end
+				
+		if( not self.db.sets[playerClass][arg] ) then
+			self:Print(string.format(L["Cannot restore profile \"%s\", you can only restore profiles saved to your class."], arg))
+			return
+		end
+		self.db.softRestore = true
 		self:RestoreProfile(arg, playerClass)
 		
 	-- Profile renaming
@@ -466,26 +477,16 @@ SlashCmdList["ABS"] = function(msg)
 		else
 			self:Print(L["Auto macro restoration is now disabled!"])
 		end
-	
-	-- Item counts
-	elseif( cmd == "count" ) then
-		self.db.checkCount = not self.db.checkCount
-
-		if( self.db.checkCount ) then
-			self:Print(L["Checking item count is now enabled!"])
-		else
-			self:Print(L["Checking item count is now disabled!"])		
-		end
 		
 	-- Halp
 	else
 		self:Print(L["Slash commands"])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs save <profile> - Saves your current action bar setup under the given profile."])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs restore <profile> - Changes your action bars to the passed profile."])
+		DEFAULT_CHAT_FRAME:AddMessage(L["/abs softrestore <profile> - Changes your action bars to the passed profile. Soft restore will only add saved buttons, not empty buttons that have no value saved to them."])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs delete <profile> - Deletes the saved profile."])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs rename <oldProfile> <newProfile> - Renames a saved profile from oldProfile to newProfile."])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs link \"<spell 1>\" \"<spell 2>\" - Links a spell with another, INCLUDE QUOTES for example you can use \"Shadowmeld\" \"War Stomp\" so if War Stomp can't be found, it'll use Shadowmeld and vica versa."])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs count - Toggles checking if you have the item in your inventory before restoring it, use if you have disconnect issues when restoring."])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs macro - Attempts to restore macros that have been deleted for a profile."])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs list - Lists all saved profiles."])
 	end
