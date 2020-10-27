@@ -6,7 +6,7 @@ ActionBarSaver = select(2, ...)
 local ABS = ActionBarSaver
 local L = ABS.L
 
-local restoreErrors, spellCache, macroCache, macroNameCache, highestRanks = {}, {}, {}, {}, {}
+local restoreErrors, spellCache, macroCache, macroNameCache, mountCache = {}, {}, {}, {}, {}
 local playerClass
 
 local MAX_MACROS = 54
@@ -24,7 +24,6 @@ function ABS:OnInitialize()
 	local defaults = {
 		macro = false,
 		checkCount = false,
-		restoreRank = false,
 		spellSubs = {},
 		sets = {}
 	}
@@ -71,24 +70,25 @@ function ABS:SaveProfile(name)
 	for actionID=1, MAX_ACTION_BUTTONS do
 		set[actionID] = nil
 		
-		local type, id, subType, extraID = GetActionInfo(actionID)
+		local type, id, subType = GetActionInfo(actionID)
 		if( type and id and ( actionID < POSSESSION_START or actionID > POSSESSION_END ) ) then
 			-- DB Format: <type>|<id>|<binding>|<name>|<extra ...>
 			-- Save a companion
 			if( type == "companion" ) then
 				set[actionID] = string.format("%s|%s|%s|%s|%s|%s", type, id, "", "", subType, "")
-			-- Save an equipment set
-			elseif( type == "equipmentset" ) then
+			-- Save an equipment set or pet
+			elseif( type == "equipmentset" or type == "summonpet" ) then
 				set[actionID] = string.format("%s|%s|%s", type, id, "")
+			-- Save a mount
+			elseif( type == "summonmount" ) then
+				local creatureName = C_MountJournal.GetMountInfoByID(id);
+				set[actionID] = string.format("%s|%s|%s", type, creatureName, "")
 			-- Save an item
 			elseif( type == "item" ) then
 				set[actionID] = string.format("%s|%d|%s|%s", type, id, "", (GetItemInfo(id)) or "")
 			-- Save a spell
 			elseif( type == "spell" and id > 0 ) then
-			    local spellName, spellStance = GetSpellInfo(id)
-				if( spellName and spellStance ) then
-					set[actionID] = string.format("%s|%d|%s|%s|%s|%s", type, id, "", spellName, spellStance or "", extraID or "")
-				end
+					set[actionID] = string.format("%s|%d|%s", type, id, "")
 			-- Save a macro
 			elseif( type == "macro" ) then
 				local name, icon, macro = GetMacroInfo(id)
@@ -110,17 +110,19 @@ function ABS:FindMacro(id, name, data)
 	if( macroCache[id] == data ) then
 		return id
 	end
-		
-	-- No such luck, check text
+	
+	-- No such luck, check name
+	if( macroNameCache[name] ) then
+		if( macroCache[macroNameCache[name]] == data ) then
+			return id
+		end
+	end
+
+	-- Still no luck, let us try data
 	for id, currentMacro in pairs(macroCache) do
 		if( currentMacro == data ) then
 			return id
 		end
-	end
-	
-	-- Still no luck, let us try name
-	if( macroNameCache[name] ) then
-		return macroNameCache[name]
 	end
 	
 	return nil
@@ -167,12 +169,11 @@ function ABS:RestoreMacros(set)
 			-- If there are macros with the same name, then blacklist and don't look by name
 			if( macroNameCache[name] ) then
 				blacklist[name] = true
-				macroNameCache[name] = i
+				macroNameCache[name] = nil
 			elseif( not blacklist[name] ) then
 				macroNameCache[name] = i
 			end
 		end
-		
 		macroCache[i] = macro and self:CompressText(macro) or nil
 	end
 end
@@ -188,32 +189,34 @@ function ABS:RestoreProfile(name, overrideClass)
 		return
 	end
 	
-	table.wipe(macroCache)
 	table.wipe(spellCache)
+	table.wipe(mountCache)
+	table.wipe(macroCache)
 	table.wipe(macroNameCache)
 	
 	-- Cache spells
 	for book=1, MAX_SKILLLINE_TABS do
 		local _, _, offset, numSpells, _, offSpecID = GetSpellTabInfo(book)
-
-		for i=1, numSpells do
-			if offSpecID == 0 then -- don't process grayed-out "offspec" tabs
-				for i=1, numSpells do
-					local index = offset + i
-					local spell, stance = GetSpellBookItemName(index, BOOKTYPE_SPELL)
-				
-					-- This way we restore the max rank of spells
-					spellCache[spell] = index
-					spellCache[string.lower(spell)] = index
-				
-					if( stance and stance ~= "" ) then
-						spellCache[spell .. stance] = index
-					end
-	 			end
+		if offSpecID == 0 then -- don't process grayed-out "offspec" tabs
+			for i=1, numSpells do
+				local index = offset + i
+				local spell, stance = GetSpellBookItemName(index, BOOKTYPE_SPELL)
+			
+				spellCache[spell] = index
+				spellCache[string.lower(spell)] = index
+			
+				if( stance and stance ~= "" ) then
+					spellCache[spell .. stance] = index
+				end
 			end
 		end
 	end
-		
+
+	-- Cache mounts
+	for i = 1, C_MountJournal.GetNumDisplayedMounts() do
+		local creatureName = C_MountJournal.GetDisplayedMountInfo(i);
+		mountCache[creatureName] = i
+ 	end		
 	
 	-- Cache macros
 	local blacklist = {}
@@ -224,12 +227,11 @@ function ABS:RestoreProfile(name, overrideClass)
 			-- If there are macros with the same name, then blacklist and don't look by name
 			if( macroNameCache[name] ) then
 				blacklist[name] = true
-				macroNameCache[name] = i
+				macroNameCache[name] = nil
 			elseif( not blacklist[name] ) then
 				macroNameCache[name] = i
 			end
 		end
-		
 		macroCache[i] = macro and self:CompressText(macro) or nil
 	end
 	
@@ -276,15 +278,12 @@ end
 
 function ABS:RestoreAction(i, type, actionID, binding, ...)
 	-- Restore a spell, flyout or companion
-	if( type == "spell" or type == "flyout" or type == "companion" ) then
-		local spellName, spellRank = ...
-		if( spellCache[spellName] ) then
-			PickupSpellBookItem(spellCache[spellName], BOOKTYPE_SPELL);
-		else
-		    PickupSpell(actionID)
-		end
+	if( type == "spell" or type == "companion" ) then
+		local spellName = ...
+
+		PickupSpell(actionID)
 		
-		if( GetCursorInfo() ~= type ) then
+		if( GetCursorInfo() ~= type and spellName ) then
 			-- Bad restore, check if we should link at all
 			local lowerSpell = string.lower(spellName)
 			for spell, linked in pairs(self.db.spellSubs) do
@@ -301,49 +300,68 @@ function ABS:RestoreAction(i, type, actionID, binding, ...)
 			ClearCursor()
 			return
 		end
-
 		PlaceAction(i)
+		
 	-- Restore flyout
-    elseif( type == "flyout" ) then
-        PickupSpell(actionID)
-        if( GetCursorInfo() ~= "flyout" ) then
+	elseif( type == "flyout" ) then
+		PickupSpell(actionID)
+		if( GetCursorInfo() ~= type ) then
 			table.insert(restoreErrors, string.format(L["Unable to restore flyout spell \"%s\" to slot #%d, it does not appear to exist anymore."], actionID, i))
 			ClearCursor()
 			return
-        end
-        PlaceAction(i)
+		end
+		PlaceAction(i)
+		
+	-- Restore mount
+	elseif( type == "summonmount" ) then
+		if (mountCache[actionID]) then
+			C_MountJournal.Pickup(mountCache[actionID])
+			if( GetCursorInfo() ~= "mount" ) then
+				table.insert(restoreErrors, string.format(L["Unable to restore mount \"%s\" to slot #%d, it does not appear to exist anymore."], actionID, i))
+				ClearCursor()
+				return
+			end
+			PlaceAction(i)
+		end
+		
+	-- Restore pet
+	elseif( type == "summonpet" ) then
+		C_PetJournal.PickupPet(actionID)
+		if( GetCursorInfo() ~= "battlepet" ) then
+			table.insert(restoreErrors, string.format(L["Unable to restore pet \"%s\" to slot #%d, it does not appear to exist anymore."], actionID, i))
+			ClearCursor()
+			return
+		end
+		PlaceAction(i)
         
 	-- Restore an equipment set button
 	elseif( type == "equipmentset" ) then
 		local slotID = -1
-		for i=1, GetNumEquipmentSets() do
-			if( GetEquipmentSetInfo(i) == actionID ) then
+		for i=1, C_EquipmentSet.GetNumEquipmentSets() do
+			if( C_EquipmentSet.GetEquipmentSetInfo(i) == actionID ) then
 				slotID = i
 				break
 			end
 		end
-		
-		PickupEquipmentSet(slotID)
+		C_EquipmentSet.PickupEquipmentSet(slotID)
 		if( GetCursorInfo() ~= "equipmentset" ) then
 			table.insert(restoreErrors, string.format(L["Unable to restore equipment set \"%s\" to slot #%d, it does not appear to exist anymore."], actionID, i))
 			ClearCursor()
 			return
 		end
-		
 		PlaceAction(i)
 			
 	-- Restore an item
 	elseif( type == "item" ) then
 		PickupItem(actionID)
-
 		if( GetCursorInfo() ~= type ) then
 			local itemName = select(i, ...)
 			table.insert(restoreErrors, string.format(L["Unable to restore item \"%s\" to slot #%d, cannot be found in inventory."], itemName and itemName ~= "" and itemName or actionID, i))
 			ClearCursor()
 			return
 		end
-		
 		PlaceAction(i)
+
 	-- Restore a macro
 	elseif( type == "macro" ) then
 		local name, _, content = ...
@@ -352,8 +370,7 @@ function ABS:RestoreAction(i, type, actionID, binding, ...)
 			table.insert(restoreErrors, string.format(L["Unable to restore macro id #%d to slot #%d, it appears to have been deleted."], actionID, i))
 			ClearCursor()
 			return
-		end
-		
+		end	
 		PlaceAction(i)
 	end
 end
@@ -491,16 +508,6 @@ SlashCmdList["ABS"] = function(msg)
 		else
 			self:Print(L["Checking item count is now disabled!"])		
 		end
-	
-	-- Rank restore
-	elseif( cmd == "rank" ) then
-		self.db.restoreRank = not self.db.restoreRank
-		
-		if( self.db.restoreRank ) then
-			self:Print(L["Auto restoring highest spell rank is now enabled!"])
-		else
-			self:Print(L["Auto restoring highest spell rank is now disabled!"])
-		end
 		
 	-- Halp
 	else
@@ -512,7 +519,6 @@ SlashCmdList["ABS"] = function(msg)
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs link \"<spell 1>\" \"<spell 2>\" - Links a spell with another, INCLUDE QUOTES for example you can use \"Shadowmeld\" \"War Stomp\" so if War Stomp can't be found, it'll use Shadowmeld and vica versa."])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs count - Toggles checking if you have the item in your inventory before restoring it, use if you have disconnect issues when restoring."])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs macro - Attempts to restore macros that have been deleted for a profile."])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs rank - Toggles if ABS should restore the highest rank of the spell, or the one saved originally."])
 		DEFAULT_CHAT_FRAME:AddMessage(L["/abs list - Lists all saved profiles."])
 	end
 end
