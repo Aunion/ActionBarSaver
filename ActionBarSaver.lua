@@ -6,7 +6,7 @@ ActionBarSaver = select(2, ...)
 local ABS = ActionBarSaver
 local L = ABS.L
 
-local restoreErrors, spellCache, macroCache, macroNameCache, mountCache = {}, {}, {}, {}, {}
+local restoreErrors, macroCache, macroNameCache, mountCache = {}, {}, {}, {}
 local playerClass
 
 local MAX_MACROS = 54
@@ -88,7 +88,7 @@ function ABS:SaveProfile(name)
 				set[actionID] = string.format("%s|%d|%s|%s", type, id, "", (GetItemInfo(id)) or "")
 			-- Save a spell
 			elseif( type == "spell" and id > 0 ) then
-					set[actionID] = string.format("%s|%d|%s", type, id, "")
+				set[actionID] = string.format("%s|%d|%s", type, id, "")
 			-- Save a macro
 			elseif( type == "macro" ) then
 				local name, icon, macro = GetMacroInfo(id)
@@ -189,28 +189,9 @@ function ABS:RestoreProfile(name, overrideClass)
 		return
 	end
 	
-	table.wipe(spellCache)
 	table.wipe(mountCache)
 	table.wipe(macroCache)
 	table.wipe(macroNameCache)
-	
-	-- Cache spells
-	for book=1, MAX_SKILLLINE_TABS do
-		local _, _, offset, numSpells, _, offSpecID = GetSpellTabInfo(book)
-		if offSpecID == 0 then -- don't process grayed-out "offspec" tabs
-			for i=1, numSpells do
-				local index = offset + i
-				local spell, stance = GetSpellBookItemName(index, BOOKTYPE_SPELL)
-			
-				spellCache[spell] = index
-				spellCache[string.lower(spell)] = index
-			
-				if( stance and stance ~= "" ) then
-					spellCache[spell .. stance] = index
-				end
-			end
-		end
-	end
 
 	-- Cache mounts
 	for i = 1, C_MountJournal.GetNumDisplayedMounts() do
@@ -277,25 +258,12 @@ function ABS:RestoreProfile(name, overrideClass)
 end
 
 function ABS:RestoreAction(i, type, actionID, binding, ...)
+
 	-- Restore a spell, flyout or companion
 	if( type == "spell" or type == "companion" ) then
-		local spellName = ...
-
 		PickupSpell(actionID)
-		
-		if( GetCursorInfo() ~= type and spellName ) then
-			-- Bad restore, check if we should link at all
-			local lowerSpell = string.lower(spellName)
-			for spell, linked in pairs(self.db.spellSubs) do
-				if( lowerSpell == spell and spellCache[linked] ) then
-					self:RestoreAction(i, type, actionID, binding, linked, nil, arg3)
-					return
-				elseif( lowerSpell == linked and spellCache[spell] ) then
-					self:RestoreAction(i, type, actionID, binding, spell, nil, arg3)
-					return
-				end
-			end
-			
+		if( GetCursorInfo() ~= type ) then
+			-- TODO: Rewrite linked spell handling
 			table.insert(restoreErrors, string.format(L["Unable to restore spell \"%s\" to slot #%d, it does not appear to have been learned yet."], spellName, i))
 			ClearCursor()
 			return
