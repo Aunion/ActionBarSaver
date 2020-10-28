@@ -263,11 +263,22 @@ function ABS:RestoreAction(i, type, actionID, binding, ...)
 	if( type == "spell" or type == "companion" ) then
 		PickupSpell(actionID)
 		if( GetCursorInfo() ~= type ) then
-			-- TODO: Rewrite linked spell handling
+			local linkedSet = self:IsSpellLinked(actionID)
+			if (linkedSet) then
+				for index,value in ipairs(self.db.spellSubs[linkedSet]) do 
+					if(IsSpellKnown(value)) then
+						PickupSpell(value)
+						break
+					end
+				end
+			end
+		end
+		if( GetCursorInfo() ~= type ) then
+			spellName = GetSpellInfo(actionID)
 			table.insert(restoreErrors, string.format(L["Unable to restore spell \"%s\" to slot #%d, it does not appear to have been learned yet."], spellName, i))
 			ClearCursor()
 			return
-		end
+		end		
 		PlaceAction(i)
 		
 	-- Restore flyout
@@ -347,6 +358,18 @@ function ABS:Print(msg)
 	DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99ABS|r: " .. msg)
 end
 
+function ABS:IsSpellLinked(spellID)
+	spellID = tonumber(spellID)
+	if (#(self.db.spellSubs) > 0) then
+		for index,value in ipairs(self.db.spellSubs) do 
+			if(tContains(value, spellID)) then
+				return index
+			end
+		end
+	end
+	return false
+end
+
 SLASH_ACTIONBARSAVER1 = nil
 SlashCmdList["ACTIONBARSAVER"] = nil
 
@@ -366,19 +389,96 @@ SlashCmdList["ABS"] = function(msg)
 		self:SaveProfile(arg)
 	
 	-- Spell sub
-	elseif( cmd == "link" and arg ~= "" ) then
-		local first, second = string.match(arg, "\"(.+)\" \"(.+)\"")
-		first = string.trim(first or "")
-		second = string.trim(second or "")
+	elseif( cmd == "linknew" and arg ~= "" ) then
+		local first = string.match(arg, "\"(.+)\"")
 		
-		if( first == "" or second == "" ) then
-			self:Print(L["Invalid spells passed, remember you must put quotes around both of them."])
+		if( not first ) then
+			self:Print(L["Invalid parameters passed, remember that you must put quotes around the spell name."])
 			return
 		end
+		spellID = select(7, GetSpellInfo(first))
+		if( not spellID ) then
+			self:Print(L["Invalid spell passed, remember that the spell's name must match exactly and you must know the spell."])
+			return
+		end
+		local linkedSet = self:IsSpellLinked(spellID)
+		if (linkedSet) then
+			self:Print(string.format(L["The spell \"%s\" already exists in linked set #%d."], first, linkedSet))
+			return
+		end
+		tinsert(self.db.spellSubs, {spellID})
+		self:Print(string.format(L["The spell \"%s\" has been added to a new linked set."], first))
+	
+	-- Spell sub
+	elseif( cmd == "linkadd" and arg ~= "" ) then
+		local first, second = string.match(arg, "(%d+) \"(.+)\"")
 		
-		self.db.spellSubs[first] = second
+		if( not first or not second ) then
+			self:Print(L["Invalid parameters passed, remember to use a number for the linked set and to put quotes around the spell name."])
+			return
+		end
+		first = tonumber(first)
+		if( not self.db.spellSubs[first] ) then
+			self:Print(string.format(L["The linked set #%d does not exist."], first))
+			return
+		end
+		spellID = select(7, GetSpellInfo(second))
+		if( not spellID ) then
+			self:Print(L["Invalid spell passed, remember that the spell's name must match exactly and you must know the spell."])
+			return
+		end
+		local linkedSet = self:IsSpellLinked(spellID)
+		if (linkedSet) then
+			self:Print(string.format(L["The spell \"%s\" already exists in linked set #%d."], second, linkedSet))
+			return
+		end
+		tinsert(self.db.spellSubs[first], spellID)
+		self:Print(string.format(L["The spell \"%s\" has been added to the linked set #%d."], second, first))
+	
+	-- Spell sub
+	elseif( cmd == "linklist" ) then
+		if( #(self.db.spellSubs) == 0 ) then
+			self:Print(L["No linked sets currently exist."])
+			return
+		end
+		for index,value in ipairs(self.db.spellSubs) do 
+			local spells = {}
+			for index2,value2 in ipairs(value) do 
+				spellName = GetSpellInfo(value2)
+				tinsert(spells, "#" .. index2 .. " " .. spellName)
+			end
+			local spellList = table.concat(spells, ", ")
+			DEFAULT_CHAT_FRAME:AddMessage(string.format(L["Linked set #%d contains: %s"], index, spellList))
+		end
+	
+	-- Spell sub
+	elseif( cmd == "linkdelete" and arg ~= "" ) then
+		local first, second = string.match(arg, "(%d+) ?(%d*)")
 		
-		self:Print(string.format(L["Spells \"%s\" and \"%s\" are now linked."], first, second))
+		if( not first ) then
+			self:Print(L["Please specify the set or the set and the spell which you wish to delete."])
+			return
+		elseif( first and #(second) == 0 ) then
+			first = tonumber(first)
+			if (not self.db.spellSubs[first]) then
+				self:Print(L["The specified linked set does not exist."])
+				return
+			end
+			tremove(self.db.spellSubs, first)
+			self:Print(string.format(L["Linked set #%d has been deleted."], first))
+		elseif( first and second ) then
+			first = tonumber(first)
+			second = tonumber(second)
+			if (not self.db.spellSubs[first] or not self.db.spellSubs[first][second]) then
+				self:Print(L["The specified linked set or spell does not exist."])
+				return
+			end
+			tremove(self.db.spellSubs[first], second)
+			if(#(self.db.spellSubs[first]) == 0) then
+				tremove(self.db.spellSubs, first)
+			end
+			self:Print(string.format(L["Spell #%d from linked set #%d has been deleted."], second, first))
+		end
 		
 	-- Profile restoring
 	elseif( cmd == "restore" and arg ~= "" ) then
@@ -481,14 +581,20 @@ SlashCmdList["ABS"] = function(msg)
 	-- Halp
 	else
 		self:Print(L["Slash commands"])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs save <profile> - Saves your current action bar setup under the given profile."])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs restore <profile> - Changes your action bars to the passed profile."])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs softrestore <profile> - Changes your action bars to the passed profile. Soft restore will only add saved buttons, not empty buttons that have no value saved to them."])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs delete <profile> - Deletes the saved profile."])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs rename <oldProfile> <newProfile> - Renames a saved profile from oldProfile to newProfile."])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs link \"<spell 1>\" \"<spell 2>\" - Links a spell with another, INCLUDE QUOTES for example you can use \"Shadowmeld\" \"War Stomp\" so if War Stomp can't be found, it'll use Shadowmeld and vica versa."])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs macro - Attempts to restore macros that have been deleted for a profile."])
-		DEFAULT_CHAT_FRAME:AddMessage(L["/abs list - Lists all saved profiles."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99==" .. L["SAVED PROFILES"] .. "==|r")
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs save <" .. L["profile"] .. ">|r - " .. L["Saves your current action bar setup under the given profile."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs restore <" .. L["profile"] .. ">|r - " .. L["Changes your action bars to the passed profile."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs softrestore <" .. L["profile"] .. ">|r - " .. L["Changes your action bars to the passed profile. Soft restore will only add saved buttons, not empty buttons that have no value saved to them."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs delete <" .. L["profile"] .. ">|r - " .. L["Deletes the saved profile."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs rename <" .. L["oldProfile"] .. "> <" .. L["newProfile"] .. ">|r - " .. L["Renames a saved profile from oldProfile to newProfile."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs macro|r - " .. L["Attempts to restore macros that have been deleted for a profile."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs list|r - " .. L["Lists all saved profiles."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99==" .. L["LINKED SETS"] .. "==|r")
+		DEFAULT_CHAT_FRAME:AddMessage(L["Linked sets allow you to add several abilities to an array of linked abilities, and if one of those abilities is listed in a profile but not available to your character, it will try to find another one from that array."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs linknew \"<" .. L["spell"] .. ">\"|r - " .. L["Creates a new linked set with the specified spell, INCLUDE QUOTES, e.g \"War Stomp\"."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs linkadd <" .. L["linked set"] .. "> \"<" .. L["spell"] .. ">\"|r - " .. L["Adds spell to a linked set, by specifiying the linked set with an integer and the spell within quotes; e.g to add War Stomp to set 1, write /linkadd 1 \"War Stomp\"."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs linklist|r - " .. L["Lists all linked spells."])
+		DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99/abs linkdelete|r - " .. L["Deletes either a linked set, or an item from a linked set. To delete the first set write /linkdelete 1, to delete the first item from the first set, write /linkdelete 1 1."])
 	end
 end
 
